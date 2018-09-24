@@ -8,7 +8,7 @@ class config():
     learning_rate = 0.00001
     lr_decay = 0.9
     dropout = 0.5
-    batch_size = 32
+    batch_size = 16
     nepoch = 10
 
     filewriter_path = './graph/'

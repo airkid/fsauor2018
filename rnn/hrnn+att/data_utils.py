@@ -8,67 +8,18 @@ import os
 import numpy as np
 import pickle
 import pandas as pd
+import jieba
 import numpy as np
 from collections import Counter
 from gensim.models.word2vec import Word2Vec
 from config import config
-from nltk.tokenize import sent_tokenize, word_tokenize
-
+import re
+# from nltk.tokenize import sent_tokenize, word_tokenize
 
 PAD_ID = 0
 UNK_ID = 1
 _PAD = "_PAD"
 _UNK = "UNK"
-
-def create_vocablulary(vocab_size, data_path, save_path='./vocab_cache', file_name='vocab.pkl'):
-    if not os.path.isdir(save_path):
-        os.makedirs(save_path)
-    file_save_path = save_path+'/'+file_name
-    if os.path.exists(file_save_path):
-        with open(file_save_path,'rb') as data_f:
-            return pickle.load(data_f)
-    else:
-        vocabulary_word2index={}
-        vocabulary_index2word={}
-        vocabulary_word2index[_PAD]=PAD_ID
-        vocabulary_index2word[PAD_ID]=_PAD
-        vocabulary_word2index[_UNK]=UNK_ID
-        vocabulary_index2word[UNK_ID]=_UNK
-
-        vocabulary_label2index={}
-        vocabulary_index2label={}
-
-        #1.load raw data
-        file_object = codecs.open(data_path+'train_tag.pkl', mode='rb')
-        train_data = pickle.load(file_object)
-        file_object.close()
-        #2.loop each line,put to counter
-        c_inputs=Counter()
-        c_labels=Counter()
-        for line in train_data:
-            input_list = line[0].strip().split(" ")
-            input_list = [x.strip().replace(" ", "") for x in input_list if x != '']
-            label_list=line[1]
-            c_inputs.update(input_list)
-            c_labels.update(label_list)
-        #return most frequency words
-        vocab_list=c_inputs.most_common(vocab_size)
-        label_list=c_labels.most_common()
-        #put those words to dict
-        for i,tuplee in enumerate(vocab_list):
-            word,_=tuplee
-            vocabulary_word2index[word]=i+2
-            vocabulary_index2word[i+2]=word
-        for i,tuplee in enumerate(label_list):
-            label,_=tuplee;label=str(label)
-            vocabulary_label2index[label]=i
-            vocabulary_index2label[i]=label
-
-        #save to file system if vocabulary of words not exists.
-        if not os.path.exists(file_save_path):
-            with open(file_save_path, 'ab') as data_f:
-                pickle.dump((vocabulary_word2index,vocabulary_index2word,vocabulary_label2index,vocabulary_index2label), data_f)
-    return vocabulary_word2index,vocabulary_index2word,vocabulary_label2index,vocabulary_index2label
 
 def filter_word2vec(source_path, save_path, word_vocab):
     print("Filter word2vec")
@@ -85,17 +36,17 @@ def filter_word2vec(source_path, save_path, word_vocab):
     save_file.close()
     print('Filter Num: ',cnt)
 
-def learn_word2vec(train_data_path, save_path, dimword, min_count=3):
+def learn_word2vec(train_data_path, save_path, dimword, min_count=2):
     print("Learning word2vec dimword = %d min_count = %d"%(dimword,min_count))
-    file_object = codecs.open(train_data_path+'train_tag.pkl', mode='rb')
+    file_object = codecs.open(train_data_path+'train_token.pkl', mode='rb')
     train_data = pickle.load(file_object)
     file_object.close()
     random.shuffle(train_data)
     X = []
     for data_line in train_data:
-        # line = [id,content,label......]
-        content_list = data_line[0].strip().split(" ")
-        X.append([word.strip() for word in content_list])
+        sentence_list = data_line[0]
+        for sen in sentence_list:
+            X.append(sen)
     w2v_model = Word2Vec(X, size=dimword, min_count=min_count)
     w2v_model.wv.save_word2vec_format(save_path+'w2v.txt', binary=False)
 
@@ -117,31 +68,47 @@ def word2id_load(filepath, w2v_map):
     file_object = codecs.open(filepath, mode='rb')
     data = pickle.load(file_object)
     for index in range(len(data)):
-        x = data[index][0].strip().split(' ')
-        data[index][0] = [w2v_map[word] if word in w2v_map else w2v_map['UNK'] for word in x]
+        sentence_list = data[index][0]
+        for _index in range(len(sentence_list)):
+            sentence_list[_index] = [w2v_map[word] if word in w2v_map else w2v_map['UNK'] for word in sentence_list[_index]]
+        data[index][0] = sentence_list
     file_object.close()
     return data
 
 def load_data(data_path, vocabulary_word2index):
-    train_data = word2id_load(data_path+'train_tag.pkl', vocabulary_word2index)
-    valid_data = word2id_load(data_path+'valid_tag.pkl', vocabulary_word2index)
-    test_data = word2id_load(data_path+'test_tag.pkl', vocabulary_word2index)
+    train_data = word2id_load(data_path+'train_token.pkl', vocabulary_word2index)
+    valid_data = word2id_load(data_path+'valid_token.pkl', vocabulary_word2index)
+    test_data = word2id_load(data_path+'test_token.pkl', vocabulary_word2index)
     return train_data, valid_data, test_data
+
+def sentence_split(content):
+    sentences = re.split('(。|！|\!|？|\?|\r|\n|\r\n|\ )',content)
+    new_sents = []
+    if len(sentences) == 1:
+    	return sentences
+    for i in range(int(len(sentences)/2)):
+        sent = (sentences[2*i] + sentences[2*i+1]).strip()
+        if len(sent) > 0:
+            new_sents.append(sent)
+    if len(sentences) %2 == 1:
+    	new_sents.append(sentences[-1])
+    return new_sents
 
 def _trans(source_data, label_list, word_vocab, label=False, length_limit=-1):
     trans_data = []
     for index, row in source_data.iterrows():
-        _content = row['content'].strip()
-        _content = jieba.cut(_content)
-        x = ' '.join(_content)
-        word_vocab.update(x.split(' '))
-        one_hot_label = np.zeros(4*len(label_list))
+        _content = row['content'].strip().strip("\"")
+        sentence_list = sentence_split(_content)
+        if length_limit != -1 and max([len(sen) for sen in sentence_list]) > length_limit:
+            continue
+        word_list = [list(jieba.cut(sen)) for sen in sentence_list]
+        for words in word_list:
+            word_vocab.update(list(words))
+        one_hot_label = np.zeros((len(label_list), 4))
         if label:
             for index, label in enumerate(label_list):
-                one_hot_label[(int(row[label])+2)+index*4] = 1.0
-        if length_limit != -1 and len(x.split(' ')) <= length_limit:
-            continue
-        trans_data.append([x,one_hot_label])
+                one_hot_label[index, (int(row[label])+2)] = 1.0   
+        trans_data.append([word_list,one_hot_label])
     return trans_data, word_vocab
 
 def trans_source_data(train_data_path, valid_data_path, test_data_path, save_path):
@@ -152,15 +119,15 @@ def trans_source_data(train_data_path, valid_data_path, test_data_path, save_pat
     source_train = pd.read_csv(train_data_path)
     source_valid = pd.read_csv(valid_data_path)
     source_test = pd.read_csv(test_data_path)
-    output_train = codecs.open(save_path+'train_tag.pkl', 'wb')
-    output_valid = codecs.open(save_path+'valid_tag.pkl', 'wb')
-    output_test = codecs.open(save_path+'test_tag.pkl', 'wb')
+    output_train = codecs.open(save_path+'train_token.pkl', 'wb')
+    output_valid = codecs.open(save_path+'valid_token.pkl', 'wb')
+    output_test = codecs.open(save_path+'test_token.pkl', 'wb')
 
     label_list = source_train.columns.tolist()[2:]
 
     train, word_vocab = _trans(source_train, label_list, word_vocab, label=True, length_limit=200)
-    valid, word_vocab = _trans(source_valid, label_list, word_vocab, label=True, length_limit=200)
-    test, word_vocab = _trans(source_test, label_list, word_vocab, label=False, length_limit=200)
+    valid, word_vocab = _trans(source_valid, label_list, word_vocab, label=True, length_limit=300)
+    test, word_vocab = _trans(source_test, label_list, word_vocab, label=False, length_limit=300)
 
     print('Train data: ',len(train))
     print('Valid data: ',len(valid))

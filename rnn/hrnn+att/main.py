@@ -34,8 +34,8 @@ def test():
 def data_preprocess():
     word_vocab = data_utils.trans_source_data(config.train_source_path, config.valid_source_path, config.test_source_path, config.data_output_path)
     print('Vocab size:', len(word_vocab))
-    #data_utils.filter_word2vec(config.data_output_path+'sgns.merge.word', config.data_output_path+'big_w2v.txt', word_vocab) 
-    #data_utils.learn_word2vec(config.data_output_path, config.data_output_path, config.dim_word)
+    data_utils.filter_word2vec(config.data_output_path+'sgns.merge.word', config.data_output_path+'big_w2v.txt', word_vocab) 
+    data_utils.learn_word2vec(config.data_output_path, config.data_output_path, config.dim_word)
     
 
 if __name__ == '__main__':
