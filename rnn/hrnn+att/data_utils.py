@@ -14,12 +14,14 @@ from collections import Counter
 from gensim.models.word2vec import Word2Vec
 from config import config
 import re
+from langconv import *
 # from nltk.tokenize import sent_tokenize, word_tokenize
 
 PAD_ID = 0
 UNK_ID = 1
 _PAD = "_PAD"
 _UNK = "UNK"
+
 
 def filter_word2vec(source_path, save_path, word_vocab):
     print("Filter word2vec")
@@ -36,6 +38,7 @@ def filter_word2vec(source_path, save_path, word_vocab):
     save_file.close()
     print('Filter Num: ',cnt)
 
+
 def learn_word2vec(train_data_path, save_path, dimword, min_count=2):
     print("Learning word2vec dimword = %d min_count = %d"%(dimword,min_count))
     file_object = codecs.open(train_data_path+'train_token.pkl', mode='rb')
@@ -49,6 +52,7 @@ def learn_word2vec(train_data_path, save_path, dimword, min_count=2):
             X.append(sen)
     w2v_model = Word2Vec(X, size=dimword, min_count=min_count)
     w2v_model.wv.save_word2vec_format(save_path+'w2v.txt', binary=False)
+
 
 def load_w2v(path, dimword):
     file_object = codecs.open(path, 'r', 'utf-8')
@@ -64,6 +68,7 @@ def load_w2v(path, dimword):
         w2v_list.append(vec)
     return w2v_map, w2v_list
 
+
 def word2id_load(filepath, w2v_map):
     file_object = codecs.open(filepath, mode='rb')
     data = pickle.load(file_object)
@@ -75,31 +80,64 @@ def word2id_load(filepath, w2v_map):
     file_object.close()
     return data
 
+
 def load_data(data_path, vocabulary_word2index):
     train_data = word2id_load(data_path+'train_token.pkl', vocabulary_word2index)
     valid_data = word2id_load(data_path+'valid_token.pkl', vocabulary_word2index)
     test_data = word2id_load(data_path+'test_token.pkl', vocabulary_word2index)
     return train_data, valid_data, test_data
 
+
+def Traditional2Simplified(sentence):
+    '''
+    将sentence中的繁体字转为简体字
+    :param sentence: 待转换的句子
+    :return: 将句子中繁体字转换为简体字之后的句子
+    '''
+    sentence = Converter('zh-hans').convert(sentence)
+    return sentence
+
+
+def strQ2B(ustring):
+    """全角转半角"""
+    rstring = ""
+    for uchar in ustring:
+        inside_code = ord(uchar)
+        if inside_code == 12288:  # 全角空格直接转换
+            inside_code = 32
+        elif (inside_code >= 65281 and inside_code <= 65374):  # 全角字符（除空格）根据关系转化
+            inside_code -= 65248
+
+        rstring += chr(inside_code)
+    return rstring
+
+
 def sentence_split(content):
-    sentences = re.split('(。|！|\!|？|\?|\r|\n|\r\n|\ )',content)
+    sentences = re.split('(…|-|\.|,|。|#|\~|！|\!|？|\?|\r|\n|\r\n|\ )',content)
     new_sents = []
     if len(sentences) == 1:
-    	return sentences
+        return sentences
     for i in range(int(len(sentences)/2)):
         sent = (sentences[2*i] + sentences[2*i+1]).strip()
-        if len(sent) > 0:
+        if len(sent) > 2:
             new_sents.append(sent)
     if len(sentences) %2 == 1:
-    	new_sents.append(sentences[-1])
+        new_sents.append(sentences[-1])
     return new_sents
 
-def _trans(source_data, label_list, word_vocab, label=False, length_limit=-1):
+
+def _trans(source_data, label_list, word_vocab, label=False, word_length_limit=-1, sentence_length_limit=-1):
     trans_data = []
+    tmp_data = codecs.open('tmp.txt', 'w+', 'utf-8')
     for index, row in source_data.iterrows():
         _content = row['content'].strip().strip("\"")
+        _content = strQ2B(Traditional2Simplified(_content))
         sentence_list = sentence_split(_content)
-        if length_limit != -1 and max([len(sen) for sen in sentence_list]) > length_limit:
+        if sentence_length_limit !=-1 and len(sentence_list) > sentence_length_limit:
+            tmp_data.write('sentence '+row['content']+'\n')
+            continue
+        if word_length_limit != -1 and max([len(sen) for sen in sentence_list]) > word_length_limit:
+            tmp_data.write('word ' + row['content'] + '\n')
             continue
         word_list = [list(jieba.cut(sen)) for sen in sentence_list]
         for words in word_list:
@@ -109,7 +147,9 @@ def _trans(source_data, label_list, word_vocab, label=False, length_limit=-1):
             for index, label in enumerate(label_list):
                 one_hot_label[index, (int(row[label])+2)] = 1.0   
         trans_data.append([word_list,one_hot_label])
+    tmp_data.close()
     return trans_data, word_vocab
+
 
 def trans_source_data(train_data_path, valid_data_path, test_data_path, save_path):
     print('Transforming source_data (tag and save)')
@@ -125,9 +165,9 @@ def trans_source_data(train_data_path, valid_data_path, test_data_path, save_pat
 
     label_list = source_train.columns.tolist()[2:]
 
-    train, word_vocab = _trans(source_train, label_list, word_vocab, label=True, length_limit=200)
-    valid, word_vocab = _trans(source_valid, label_list, word_vocab, label=True, length_limit=300)
-    test, word_vocab = _trans(source_test, label_list, word_vocab, label=False, length_limit=300)
+    train, word_vocab = _trans(source_train, label_list, word_vocab, label=True, word_length_limit=100, sentence_length_limit=200)
+    valid, word_vocab = _trans(source_valid, label_list, word_vocab, label=True, word_length_limit=100, sentence_length_limit=200)
+    test, word_vocab = _trans(source_test, label_list, word_vocab, label=False, word_length_limit=100, sentence_length_limit=200)
 
     print('Train data: ',len(train))
     print('Valid data: ',len(valid))
@@ -140,6 +180,7 @@ def trans_source_data(train_data_path, valid_data_path, test_data_path, save_pat
     output_valid.close()
     output_test.close()
     return word_vocab
+
 
 def minibatches(data, minibatch_size):
     x_batch, y_batch = [], []
@@ -154,8 +195,6 @@ def minibatches(data, minibatch_size):
     if len(x_batch) != 0:
         yield x_batch, y_batch
 
+
 if __name__ == '__main__':
-    train_path = '/home/yanhr/contest/ai_challenger/sentiment/source_data/ai_challenger_sentiment_analysis_trainingset_20180816/sentiment_analysis_trainingset.csv'
-    valid_path = '/home/yanhr/contest/ai_challenger/sentiment/source_data/ai_challenger_sentiment_analysis_validationset_20180816/sentiment_analysis_validationset.csv'
-    test_path = '/home/yanhr/contest/ai_challenger/sentiment/source_data/ai_challenger_sentiment_analysis_testa_20180816/sentiment_analysis_testa.csv'
-    trans_source_data(train_path, valid_path, test_path, '/home/yanhr/contest/ai_challenger/fsauor2018/RNN/data')
+    trans_source_data(config.train_source_path, config.valid_source_path, config.test_source_path, '/home/yanhr/contest/ai_challenger/fsauor2018/RNN/data')

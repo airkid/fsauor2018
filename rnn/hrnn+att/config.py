@@ -8,13 +8,13 @@ class config():
     learning_rate = 0.00001
     lr_decay = 0.9
     dropout = 0.5
-    batch_size = 16
+    batch_size = 8
     nepoch = 10
 
     filewriter_path = './graph/'
     output_path = './model/'
     data_output_path = './data/'
     vocab_size = 200000
-    train_source_path = '/home/yanhr/contest/ai_challenger/sentiment/source_data/ai_challenger_sentiment_analysis_trainingset_20180816/sentiment_analysis_trainingset.csv'
-    valid_source_path = '/home/yanhr/contest/ai_challenger/sentiment/source_data/ai_challenger_sentiment_analysis_validationset_20180816/sentiment_analysis_validationset.csv'
-    test_source_path = '/home/yanhr/contest/ai_challenger/sentiment/source_data/ai_challenger_sentiment_analysis_testa_20180816/sentiment_analysis_testa.csv'
+    train_source_path = '/home/jinxiaolong/yanhr/fsauor2018/source_data/sentiment_analysis_trainingset.csv'
+    valid_source_path = '/home/jinxiaolong/yanhr/fsauor2018/source_data/sentiment_analysis_validationset.csv'
+    test_source_path = '/home/jinxiaolong/yanhr/fsauor2018/source_data/sentiment_analysis_testa.csv'

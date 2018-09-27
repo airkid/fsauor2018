@@ -45,7 +45,7 @@ class sentimentModel(object):
                 for label in range(self.config.nlabels):
                     _hidden_list = tf.reshape(hidden_list, (-1,self.config.dim_rnn*2))
                     e_word = tf.reshape(tf.matmul(_hidden_list, tf.reshape(self.word_attentions[label],(300,1))), (-1, self.max_word_length))
-                    a_word = tf.expand_dims(tf.nn.softmax(e_word, axis=-1),-1)
+                    a_word = tf.expand_dims(tf.nn.softmax(e_word, dim=-1),-1)
                     hidden_state[label] = tf.reduce_sum(hidden_list*a_word, axis=1)
                     #hidden_state[label] = tf.nn.dropout(hidden_state[label], self.config.dropout)
                 return hidden_state
@@ -57,7 +57,7 @@ class sentimentModel(object):
         elif attention_method == 'attention':
             with tf.variable_scope("attention_sentence_"+str(label)):
                 e_sentence = tf.matmul(hidden_list, self.sentence_attentions[label])
-                a_sentence = tf.nn.softmax(e_sentence, axis=-1)
+                a_sentence = tf.nn.softmax(e_sentence, dim=-1)
                 hidden_state = tf.reduce_sum(hidden_list*a_sentence, axis=1)
                 #hidden_state[label] = tf.nn.dropout(hidden_state[label], self.config.dropout)
             return hidden_state
@@ -143,6 +143,7 @@ class sentimentModel(object):
         for i in word_length:
             for j in i:
                 max_word_length = max(max_word_length, j)
+        print(max_word_length, max_sentence_length, max_word_length*max_sentence_length)
         for i in range(len(docs)):
             for j in range(len(docs[i])):
                 docs[i][j].extend([0 for k in range(max_word_length-len(docs[i][j]))])

@@ -1,3 +1,5 @@
 *cache*
 data
 *ipynb
+.idea*
+.gitignore~
